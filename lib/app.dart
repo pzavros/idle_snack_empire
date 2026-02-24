@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'controllers/game_controller.dart';
 import 'screens/home_screen.dart';
 import 'services/ads_service.dart';
+import 'services/audio_service.dart';
 import 'services/haptics_service.dart';
 import 'services/storage_service.dart';
 
@@ -17,11 +18,13 @@ class IdleSnackEmpireApp extends StatelessWidget {
       providers: [
         Provider<StorageService>(create: (_) => StorageService()),
         Provider<AdsService>(create: (_) => StubAdsService()),
+        Provider<AudioService>(create: (_) => SynthAudioService()),
         Provider<HapticsService>(create: (_) => const HapticsService()),
         ChangeNotifierProvider<GameController>(
           create: (context) => GameController(
             storageService: context.read<StorageService>(),
             adsService: context.read<AdsService>(),
+            audioService: context.read<AudioService>(),
             hapticsService: context.read<HapticsService>(),
           ),
         ),

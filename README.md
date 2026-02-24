@@ -17,8 +17,8 @@ Offline idle/incremental mobile game built with Flutter.
 - Cosmetics:
   - 6 unlockable themes
   - 8 unlockable avatars
-- Prestige system with Golden Chips and permanent multiplier.
-- Haptics hooks (light/medium/heavy), optional sound toggle (no-op), ad hooks via stub service.
+- Prestige system with Empire Levels and permanent multiplier.
+- Synthesized background music + SFX with optional sound toggle, haptics hooks (light/medium/heavy), ad hooks via stub service.
 - Full local persistence with `SharedPreferences`.
 
 ## Run
@@ -74,7 +74,7 @@ lib/
 Current ad integration point is `lib/services/ads_service.dart`.
 
 - `AdsService` defines:
-  - `Future<bool> showRewarded()`
+  - `Future<bool> showRewarded(RewardedPlacement placement)`
   - `Future<void> showInterstitial()`
 - `StubAdsService` is currently used and simulates success.
 
@@ -90,7 +90,7 @@ To plug AdMob later:
 - Storage backend: `SharedPreferences`
 - Save key: `idle_snack_empire_save_v1`
 - Stored data includes:
-  - coins, lifetime coins, golden chips
+  - coins, lifetime coins, empire level
   - selected/unlocked themes and avatars
   - station states (levels, unlocks, automation, multipliers, progress, queued cycles)
   - boost timers

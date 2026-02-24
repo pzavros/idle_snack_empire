@@ -1,5 +1,13 @@
+enum RewardedPlacement {
+  incomeBoost,
+  instantCash,
+  tycoonBundle,
+  offlineDouble,
+  jackpotCrate,
+}
+
 abstract class AdsService {
-  Future<bool> showRewarded();
+  Future<bool> showRewarded(RewardedPlacement placement);
   Future<void> showInterstitial();
 }
 
@@ -13,7 +21,7 @@ class StubAdsService implements AdsService {
   final Duration simulatedDelay;
 
   @override
-  Future<bool> showRewarded() async {
+  Future<bool> showRewarded(RewardedPlacement placement) async {
     await Future<void>.delayed(simulatedDelay);
     return rewardedResult;
   }

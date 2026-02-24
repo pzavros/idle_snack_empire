@@ -292,18 +292,35 @@ class Station extends ChangeNotifier {
     }
 
     data.lastTickEpochMs = nowEpochMs;
+
+    if (!data.isAutomated) {
+      if (data.pendingCollections > 0) {
+        if (data.progress != 1) {
+          data.progress = 1;
+          notifyListeners();
+        }
+        return 0;
+      }
+
+      data.progress += elapsedSeconds / cycle;
+      if (data.progress >= 1) {
+        data.progress = 1;
+        data.pendingCollections = 1;
+      }
+
+      notifyListeners();
+      return 0;
+    }
+
     data.progress += elapsedSeconds / cycle;
     var completedCycles = 0;
     if (data.progress >= 1) {
       completedCycles = data.progress.floor();
       data.progress -= completedCycles;
-      if (!data.isAutomated) {
-        data.pendingCollections += completedCycles;
-      }
     }
 
     notifyListeners();
-    return data.isAutomated ? completedCycles : 0;
+    return completedCycles;
   }
 
   int collectPendingCycles() {
@@ -311,7 +328,11 @@ class Station extends ChangeNotifier {
     if (queued <= 0) {
       return 0;
     }
+
     data.pendingCollections = 0;
+    if (!data.isAutomated) {
+      data.progress = 0;
+    }
     notifyListeners();
     return queued;
   }
@@ -330,6 +351,10 @@ class Station extends ChangeNotifier {
   }
 
   void enableAutomation() {
+    if (data.pendingCollections > 0) {
+      data.pendingCollections = 0;
+      data.progress = 1;
+    }
     data.isAutomated = true;
     notifyListeners();
   }

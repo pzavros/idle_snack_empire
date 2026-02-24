@@ -87,7 +87,7 @@ class SkinsScreen extends StatelessWidget {
                 children: [
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
-                    title: const Text('Sound (no-op for now)'),
+                    title: const Text('Sound'),
                     value: controller.state.soundEnabled,
                     onChanged: controller.setSoundEnabled,
                   ),

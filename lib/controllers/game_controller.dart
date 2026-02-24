@@ -7,6 +7,7 @@ import '../models/game_state.dart';
 import '../models/station.dart';
 import '../models/upgrades.dart';
 import '../services/ads_service.dart';
+import '../services/audio_service.dart';
 import '../services/haptics_service.dart';
 import '../services/storage_service.dart';
 import 'economy.dart';
@@ -42,9 +43,11 @@ class GameController extends ChangeNotifier {
   GameController({
     required StorageService storageService,
     required AdsService adsService,
+    required AudioService audioService,
     required HapticsService hapticsService,
   }) : _storageService = storageService,
        _adsService = adsService,
+       _audioService = audioService,
        _hapticsService = hapticsService;
 
   static const int _stationsPerStage = 2;
@@ -60,6 +63,7 @@ class GameController extends ChangeNotifier {
 
   final StorageService _storageService;
   final AdsService _adsService;
+  final AudioService _audioService;
   final HapticsService _hapticsService;
 
   final ValueNotifier<List<CoinParticleEvent>> coinParticleEvents =
@@ -92,7 +96,7 @@ class GameController extends ChangeNotifier {
   double get coins => _state.coins;
   double get lifetimeCoins => _state.lifetimeCoins;
   double get runCoinsSincePrestige => _state.lifetimeCoinsSincePrestige;
-  int get goldenChips => _state.goldenChips;
+  int get empireLevel => _state.empireLevel;
   int get prestigeCount => _state.prestigeCount;
   double get currentGlobalSpeedMultiplier =>
       Economy.globalSpeedMultiplier(_state);
@@ -223,6 +227,8 @@ class GameController extends ChangeNotifier {
     _state = await _storageService.loadGameState();
     _rebuildStationsFromState();
     _normalizeState();
+    await _audioService.initialize();
+    await _audioService.setSoundEnabled(_state.soundEnabled);
 
     _ready = true;
     _lastTickTime = DateTime.now();
@@ -269,6 +275,9 @@ class GameController extends ChangeNotifier {
     }
     if (_state.prestigeCount < 0) {
       _state.prestigeCount = 0;
+    }
+    if (_state.empireLevel < 0) {
+      _state.empireLevel = 0;
     }
   }
 
@@ -504,6 +513,7 @@ class GameController extends ChangeNotifier {
       subtitle: station.definition.name,
       color: controllerColorSky,
     );
+    unawaited(_audioService.playLevelUp());
     unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
@@ -526,6 +536,9 @@ class GameController extends ChangeNotifier {
         subtitle: '${station.definition.name} milestone',
         color: controllerColorGold,
       );
+      unawaited(_audioService.playLevelUp());
+    } else {
+      unawaited(_audioService.playPurchase());
     }
     unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
@@ -547,9 +560,43 @@ class GameController extends ChangeNotifier {
       subtitle: '${station.definition.name} is now automated',
       color: controllerColorMint,
     );
+    unawaited(_audioService.playPurchase());
     unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
+  }
+
+  int buyAllAffordableManagers() {
+    var purchased = 0;
+
+    for (final station in _stations) {
+      if (!station.isUnlocked || station.isAutomated) {
+        continue;
+      }
+      if (_state.coins < station.definition.managerCost) {
+        continue;
+      }
+      if (!_spendCoins(station.definition.managerCost)) {
+        continue;
+      }
+
+      station.enableAutomation();
+      purchased += 1;
+    }
+
+    if (purchased > 0) {
+      _registerMajorAction();
+      _emitMoment(
+        title: 'Automation Wave',
+        subtitle: '$purchased manager${purchased == 1 ? '' : 's'} hired',
+        color: controllerColorMint,
+      );
+      unawaited(_audioService.playPurchase());
+      unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
+      notifyListeners();
+    }
+
+    return purchased;
   }
 
   bool buyStationProfitUpgrade(Station station) {
@@ -567,9 +614,43 @@ class GameController extends ChangeNotifier {
       subtitle: station.definition.name,
       color: controllerColorViolet,
     );
+    unawaited(_audioService.playPurchase());
     unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
+  }
+
+  int buyAllAffordableProfitUpgrades() {
+    var purchased = 0;
+
+    for (final station in _stations) {
+      if (!station.isUnlocked || station.hasProfitUpgrade) {
+        continue;
+      }
+      if (_state.coins < station.definition.profitUpgradeCost) {
+        continue;
+      }
+      if (!_spendCoins(station.definition.profitUpgradeCost)) {
+        continue;
+      }
+
+      station.applyProfitUpgrade();
+      purchased += 1;
+    }
+
+    if (purchased > 0) {
+      _registerMajorAction();
+      _emitMoment(
+        title: 'Profit Surge',
+        subtitle: '$purchased station${purchased == 1 ? '' : 's'} doubled',
+        color: controllerColorViolet,
+      );
+      unawaited(_audioService.playPurchase());
+      unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
+      notifyListeners();
+    }
+
+    return purchased;
   }
 
   bool collectStation(Station station, {Offset? particleOrigin}) {
@@ -612,8 +693,10 @@ class GameController extends ChangeNotifier {
           color: controllerColorGold,
         );
         unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
+        unawaited(_audioService.playLevelUp());
       }
     }
+    unawaited(_audioService.playCollect());
     unawaited(_hapticsService.light(enabled: _state.hapticsEnabled));
 
     notifyListeners();
@@ -635,6 +718,7 @@ class GameController extends ChangeNotifier {
       subtitle: 'All stations earn more',
       color: controllerColorSky,
     );
+    unawaited(_audioService.playLevelUp());
     unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
@@ -655,6 +739,7 @@ class GameController extends ChangeNotifier {
       subtitle: 'All cycles complete faster',
       color: controllerColorMint,
     );
+    unawaited(_audioService.playLevelUp());
     unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
@@ -680,12 +765,16 @@ class GameController extends ChangeNotifier {
       subtitle: '15 minute boost started',
       color: controllerColorSky,
     );
+    unawaited(_audioService.playBoost());
+    unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
   }
 
   Future<bool> watchAdForDoubleIncomeBoost() async {
-    final rewarded = await _adsService.showRewarded();
+    final rewarded = await _adsService.showRewarded(
+      RewardedPlacement.incomeBoost,
+    );
     if (!rewarded) {
       return false;
     }
@@ -696,6 +785,8 @@ class GameController extends ChangeNotifier {
       subtitle: 'Rewarded boost started',
       color: controllerColorSky,
     );
+    unawaited(_audioService.playBoost());
+    unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
   }
@@ -713,12 +804,57 @@ class GameController extends ChangeNotifier {
       subtitle: 'You claimed 5 minutes instantly',
       color: controllerColorMint,
     );
+    unawaited(_audioService.playPurchase());
+    unawaited(_hapticsService.light(enabled: _state.hapticsEnabled));
+    notifyListeners();
+    return true;
+  }
+
+  bool buyTycoonBundle() {
+    const cost = 720.0;
+    if (!_spendCoins(cost)) {
+      return false;
+    }
+
+    _activateDoubleIncomeBoost(const Duration(minutes: 15));
+    _grantInstantIncome(minutes: 10);
+    _registerMajorAction();
+    _emitMoment(
+      title: 'Tycoon Bundle',
+      subtitle: '2x boost + 10m instant income',
+      color: controllerColorGold,
+    );
+    unawaited(_audioService.playBoost());
+    unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
+    notifyListeners();
+    return true;
+  }
+
+  Future<bool> watchAdForTycoonBundle() async {
+    final rewarded = await _adsService.showRewarded(
+      RewardedPlacement.tycoonBundle,
+    );
+    if (!rewarded) {
+      return false;
+    }
+
+    _activateDoubleIncomeBoost(const Duration(minutes: 5));
+    _grantInstantIncome(minutes: 4);
+    _emitMoment(
+      title: 'Promo Bundle',
+      subtitle: 'Ad reward: mini boost + instant cash',
+      color: controllerColorSky,
+    );
+    unawaited(_audioService.playBoost());
+    unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
   }
 
   Future<bool> watchAdForInstantIncome() async {
-    final rewarded = await _adsService.showRewarded();
+    final rewarded = await _adsService.showRewarded(
+      RewardedPlacement.instantCash,
+    );
     if (!rewarded) {
       return false;
     }
@@ -729,8 +865,72 @@ class GameController extends ChangeNotifier {
       subtitle: 'Rewarded instant income granted',
       color: controllerColorMint,
     );
+    unawaited(_audioService.playPurchase());
+    unawaited(_hapticsService.light(enabled: _state.hapticsEnabled));
     notifyListeners();
     return true;
+  }
+
+  Future<bool> watchAdForMegaCashDrop() async {
+    final rewarded = await _adsService.showRewarded(
+      RewardedPlacement.instantCash,
+    );
+    if (!rewarded) {
+      return false;
+    }
+
+    _grantInstantIncome(minutes: 10);
+    _emitMoment(
+      title: 'Mega Cash Drop',
+      subtitle: 'Rewarded instant 10-minute income granted',
+      color: controllerColorMint,
+    );
+    unawaited(_audioService.playBoost());
+    unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
+    notifyListeners();
+    return true;
+  }
+
+  Future<String?> watchAdForJackpotCrate() async {
+    final rewarded = await _adsService.showRewarded(
+      RewardedPlacement.jackpotCrate,
+    );
+    if (!rewarded) {
+      return null;
+    }
+
+    final roll = Random().nextInt(4);
+    late final String resultText;
+    switch (roll) {
+      case 0:
+        _activateDoubleIncomeBoost(const Duration(minutes: 10));
+        resultText = 'Lucky Boost: 2x income for 10 minutes';
+        break;
+      case 1:
+        _grantInstantIncome(minutes: 8);
+        resultText = 'Cash Storm: instant 8 minutes of income';
+        break;
+      case 2:
+        _activateDoubleIncomeBoost(const Duration(minutes: 6));
+        _grantInstantIncome(minutes: 3);
+        resultText = 'Hybrid Rush: 2x for 6m + instant 3m income';
+        break;
+      default:
+        _activateDoubleIncomeBoost(const Duration(minutes: 3));
+        _grantInstantIncome(minutes: 12);
+        resultText = 'Epic Pull: 2x for 3m + instant 12m income';
+        break;
+    }
+
+    _emitMoment(
+      title: 'Jackpot Crate',
+      subtitle: resultText,
+      color: controllerColorGold,
+    );
+    unawaited(_audioService.playBoost());
+    unawaited(_hapticsService.medium(enabled: _state.hapticsEnabled));
+    notifyListeners();
+    return resultText;
   }
 
   void _grantInstantIncome({required int minutes}) {
@@ -811,6 +1011,7 @@ class GameController extends ChangeNotifier {
 
   void setSoundEnabled(bool enabled) {
     _state.soundEnabled = enabled;
+    unawaited(_audioService.setSoundEnabled(enabled));
     notifyListeners();
   }
 
@@ -859,6 +1060,7 @@ class GameController extends ChangeNotifier {
       subtitle: '+${amount.toStringAsFixed(0)} coins',
       color: controllerColorSky,
     );
+    unawaited(_audioService.playBoost());
     notifyListeners();
     return amount;
   }
@@ -869,7 +1071,9 @@ class GameController extends ChangeNotifier {
       return 0;
     }
 
-    final rewarded = await _adsService.showRewarded();
+    final rewarded = await _adsService.showRewarded(
+      RewardedPlacement.offlineDouble,
+    );
     if (!rewarded) {
       return 0;
     }
@@ -925,6 +1129,7 @@ class GameController extends ChangeNotifier {
   Future<void> handleAppLifecycleChange(
     AppLifecycleState appLifecycleState,
   ) async {
+    await _audioService.onAppLifecycleChange(appLifecycleState);
     if (!_ready) {
       return;
     }
@@ -950,12 +1155,12 @@ class GameController extends ChangeNotifier {
       return false;
     }
 
-    final gainedChips = estimatedPrestigeGain;
-    if (gainedChips <= 0) {
+    final gainedLevels = estimatedPrestigeGain;
+    if (gainedLevels <= 0) {
       return false;
     }
 
-    _state.goldenChips += gainedChips;
+    _state.empireLevel += gainedLevels;
     _state.prestigeCount += 1;
     _state.coins = 0;
     _state.lifetimeCoinsSincePrestige = 0;
@@ -968,11 +1173,13 @@ class GameController extends ChangeNotifier {
     }
 
     _collectCombo = 0;
+    final levelLabel = gainedLevels == 1 ? 'Level' : 'Levels';
     _emitMoment(
       title: 'Prestige Complete',
-      subtitle: '+$gainedChips Golden Chips',
+      subtitle: '+$gainedLevels Empire $levelLabel',
       color: controllerColorGold,
     );
+    unawaited(_audioService.playPrestige());
     unawaited(_hapticsService.heavy(enabled: _state.hapticsEnabled));
     notifyListeners();
     unawaited(saveNow());

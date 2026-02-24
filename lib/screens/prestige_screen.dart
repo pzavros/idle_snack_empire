@@ -15,6 +15,7 @@ class PrestigeScreen extends StatelessWidget {
       body: Consumer<GameController>(
         builder: (context, controller, child) {
           final gain = controller.estimatedPrestigeGain;
+          final gainLabel = gain == 1 ? 'Level' : 'Levels';
           final canPrestige = controller.canPrestige;
           final threshold = controller.nextPrestigeThreshold;
           final remaining = (threshold - controller.runCoinsSincePrestige)
@@ -34,7 +35,7 @@ class PrestigeScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Golden Chips',
+                      'Empire Level',
                       style: TextStyle(
                         fontSize: 24,
                         fontWeight: FontWeight.w900,
@@ -42,7 +43,7 @@ class PrestigeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Current Chips: ${controller.goldenChips}',
+                      'Current Level: ${controller.empireLevel}',
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 4),
@@ -50,6 +51,15 @@ class PrestigeScreen extends StatelessWidget {
                       'Permanent Multiplier: '
                       '${controller.permanentIncomeMultiplier.toStringAsFixed(2)}x',
                       style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 2),
+                    const Text(
+                      'Each Empire Level adds +0.5x permanent income.',
+                      style: TextStyle(
+                        color: Color(0xFF4B5563),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -92,15 +102,15 @@ class PrestigeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'If you reset now you gain +$gain Golden Chips.\n'
+                      'If you reset now you gain +$gain Empire $gainLabel.\n'
                       'Reset clears coins, stations, upgrades, and temporary boosts,\n'
-                      'but keeps Golden Chips, cosmetics, and total lifetime stats.',
+                      'but keeps Empire Level, cosmetics, and total lifetime stats.',
                       style: const TextStyle(color: Color(0xFF4B5563)),
                     ),
                     const SizedBox(height: 16),
                     PurchaseButton(
                       label: canPrestige
-                          ? 'Prestige +$gain Chips'
+                          ? 'Prestige +$gain $gainLabel'
                           : 'Need ${formatCoins(remaining)} more',
                       enabled: canPrestige,
                       backgroundColor: const Color(0xFFD97706),
@@ -112,7 +122,7 @@ class PrestigeScreen extends StatelessWidget {
                                   return AlertDialog(
                                     title: const Text('Confirm Prestige'),
                                     content: Text(
-                                      'Reset all stations and coins for $gain Golden Chips?',
+                                      'Reset all stations and coins for $gain Empire $gainLabel?',
                                     ),
                                     actions: [
                                       TextButton(

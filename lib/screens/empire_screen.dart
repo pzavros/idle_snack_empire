@@ -46,7 +46,7 @@ class EmpireScreen extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          'Golden Chips: ${controller.goldenChips} '
+                          'Empire Level: ${controller.empireLevel} '
                           '(${controller.permanentIncomeMultiplier.toStringAsFixed(2)}x)',
                           style: const TextStyle(
                             color: Color(0xFFCBD5E1),

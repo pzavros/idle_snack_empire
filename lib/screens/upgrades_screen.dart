@@ -56,6 +56,7 @@ class _UpgradesScreenState extends State<UpgradesScreen> {
 
         var affordableActions = 0;
         var pendingActions = 0;
+        var completedActions = 0;
         for (final station in unlockedStations) {
           final canBuyProfit =
               !station.hasProfitUpgrade &&
@@ -66,9 +67,13 @@ class _UpgradesScreenState extends State<UpgradesScreen> {
 
           if (!station.hasProfitUpgrade) {
             pendingActions += 1;
+          } else {
+            completedActions += 1;
           }
           if (!station.isAutomated) {
             pendingActions += 1;
+          } else {
+            completedActions += 1;
           }
           if (canBuyProfit) {
             affordableActions += 1;
@@ -77,6 +82,94 @@ class _UpgradesScreenState extends State<UpgradesScreen> {
             affordableActions += 1;
           }
         }
+        final totalStationActions = unlockedStations.length * 2;
+        final completionRatio = totalStationActions <= 0
+            ? 0.0
+            : (completedActions / totalStationActions)
+                  .clamp(0.0, 1.0)
+                  .toDouble();
+
+        final recommendationCandidates = <_UpgradeRecommendation>[
+          _UpgradeRecommendation(
+            title: 'Global Profit Tier ${profitTier + 1}',
+            subtitle:
+                'Boosts all station earnings by ${(Economy.globalProfitTierBonus * 100).toStringAsFixed(0)}%',
+            cost: globalProfitCost,
+            incomeDelta: max(0.0, projectedProfitIncome - currentIncome),
+            paybackSeconds: currentIncome > 0
+                ? globalProfitCost /
+                      max(0.0001, projectedProfitIncome - currentIncome)
+                : double.infinity,
+            affordable: controller.coins >= globalProfitCost,
+            color: const Color(0xFF0EA5E9),
+            onBuy: controller.buyGlobalProfitUpgrade,
+          ),
+          _UpgradeRecommendation(
+            title: 'Global Speed Tier ${speedTier + 1}',
+            subtitle:
+                'Speeds up all cycles by ${(Economy.globalSpeedTierBonus * 100).toStringAsFixed(0)}%',
+            cost: globalSpeedCost,
+            incomeDelta: max(0.0, projectedSpeedIncome - currentIncome),
+            paybackSeconds: currentIncome > 0
+                ? globalSpeedCost /
+                      max(0.0001, projectedSpeedIncome - currentIncome)
+                : double.infinity,
+            affordable: controller.coins >= globalSpeedCost,
+            color: const Color(0xFF16A34A),
+            onBuy: controller.buyGlobalSpeedUpgrade,
+          ),
+        ];
+
+        for (final station in unlockedStations) {
+          if (station.hasProfitUpgrade) {
+            continue;
+          }
+          final stationIncome = stationIncomeById[station.definition.id] ?? 0.0;
+          recommendationCandidates.add(
+            _UpgradeRecommendation(
+              title: 'Double ${station.definition.name} Profit',
+              subtitle: 'Adds +${formatCoins(stationIncome)}/sec',
+              cost: station.definition.profitUpgradeCost,
+              incomeDelta: max(0.0, stationIncome),
+              paybackSeconds: stationIncome > 0
+                  ? station.definition.profitUpgradeCost / stationIncome
+                  : double.infinity,
+              affordable:
+                  controller.coins >= station.definition.profitUpgradeCost,
+              color: const Color(0xFF7C3AED),
+              onBuy: () => controller.buyStationProfitUpgrade(station),
+            ),
+          );
+        }
+
+        final affordableCandidates =
+            recommendationCandidates
+                .where((candidate) => candidate.affordable)
+                .toList()
+              ..sort((a, b) {
+                final paybackSort = a.paybackSeconds.compareTo(
+                  b.paybackSeconds,
+                );
+                if (paybackSort != 0) {
+                  return paybackSort;
+                }
+                return b.incomeDelta.compareTo(a.incomeDelta);
+              });
+
+        final fallbackCandidates = recommendationCandidates.toList()
+          ..sort((a, b) {
+            final aShortfall = max(0.0, a.cost - controller.coins);
+            final bShortfall = max(0.0, b.cost - controller.coins);
+            final shortfallSort = aShortfall.compareTo(bShortfall);
+            if (shortfallSort != 0) {
+              return shortfallSort;
+            }
+            return a.paybackSeconds.compareTo(b.paybackSeconds);
+          });
+
+        final recommended = affordableCandidates.isNotEmpty
+            ? affordableCandidates.first
+            : (fallbackCandidates.isNotEmpty ? fallbackCandidates.first : null);
 
         final sortedStations = [...unlockedStations]
           ..sort((a, b) {
@@ -130,6 +223,43 @@ class _UpgradesScreenState extends State<UpgradesScreen> {
               currentIncome: currentIncome,
               affordableActions: affordableActions,
               pendingActions: pendingActions,
+              completionRatio: completionRatio,
+              completedActions: completedActions,
+              totalActions: totalStationActions,
+            ),
+            const SizedBox(height: 12),
+            if (recommended != null) ...[
+              _RecommendationCard(
+                recommendation: recommended,
+                coins: controller.coins,
+              ),
+              const SizedBox(height: 12),
+            ],
+            _QuickActionsCard(
+              onAutoBuyProfit: () {
+                final count = controller.buyAllAffordableProfitUpgrades();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      count > 0
+                          ? 'Bought $count profit upgrade(s).'
+                          : 'No affordable profit upgrades right now.',
+                    ),
+                  ),
+                );
+              },
+              onAutoBuyManagers: () {
+                final count = controller.buyAllAffordableManagers();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      count > 0
+                          ? 'Hired $count manager(s).'
+                          : 'No affordable managers right now.',
+                    ),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 12),
             _SectionCard(
@@ -240,37 +370,82 @@ class _SummaryStrip extends StatelessWidget {
     required this.currentIncome,
     required this.affordableActions,
     required this.pendingActions,
+    required this.completionRatio,
+    required this.completedActions,
+    required this.totalActions,
   });
 
   final double currentIncome;
   final int affordableActions;
   final int pendingActions;
+  final double completionRatio;
+  final int completedActions;
+  final int totalActions;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
       children: [
-        Expanded(
-          child: _MetricTile(
-            label: 'Income/sec',
-            value: formatCoins(currentIncome),
-            color: const Color(0xFF22D3EE),
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _MetricTile(
+                label: 'Income/sec',
+                value: formatCoins(currentIncome),
+                color: const Color(0xFF22D3EE),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _MetricTile(
+                label: 'Affordable',
+                value: '$affordableActions',
+                color: const Color(0xFF4ADE80),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _MetricTile(
+                label: 'Pending',
+                value: '$pendingActions',
+                color: const Color(0xFFFACC15),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _MetricTile(
-            label: 'Affordable',
-            value: '$affordableActions',
-            color: const Color(0xFF4ADE80),
+        const SizedBox(height: 8),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A).withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: _MetricTile(
-            label: 'Pending',
-            value: '$pendingActions',
-            color: const Color(0xFFFACC15),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Upgrade Completion: $completedActions / $totalActions',
+                style: const TextStyle(
+                  color: Color(0xFFCBD5E1),
+                  fontWeight: FontWeight.w800,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  minHeight: 7,
+                  value: completionRatio,
+                  backgroundColor: Colors.white.withValues(alpha: 0.12),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    Color(0xFF22D3EE),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -317,6 +492,221 @@ class _MetricTile extends StatelessWidget {
               fontWeight: FontWeight.w900,
               fontSize: 14,
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UpgradeRecommendation {
+  const _UpgradeRecommendation({
+    required this.title,
+    required this.subtitle,
+    required this.cost,
+    required this.incomeDelta,
+    required this.paybackSeconds,
+    required this.affordable,
+    required this.color,
+    required this.onBuy,
+  });
+
+  final String title;
+  final String subtitle;
+  final double cost;
+  final double incomeDelta;
+  final double paybackSeconds;
+  final bool affordable;
+  final Color color;
+  final VoidCallback onBuy;
+}
+
+class _RecommendationCard extends StatelessWidget {
+  const _RecommendationCard({
+    required this.recommendation,
+    required this.coins,
+  });
+
+  final _UpgradeRecommendation recommendation;
+  final double coins;
+
+  @override
+  Widget build(BuildContext context) {
+    final shortfall = max(0.0, recommendation.cost - coins);
+    final eta = _formatEta(recommendation.paybackSeconds);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: recommendation.color.withValues(alpha: 0.5),
+          width: 1.2,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Recommended Next Buy',
+            style: TextStyle(
+              color: Color(0xFFBFDBFE),
+              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            recommendation.title,
+            style: const TextStyle(
+              color: Color(0xFFF8FAFC),
+              fontWeight: FontWeight.w900,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            recommendation.subtitle,
+            style: const TextStyle(
+              color: Color(0xFFCBD5E1),
+              fontWeight: FontWeight.w600,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _infoPill(
+                  'Gain +${formatCoins(recommendation.incomeDelta)}/s',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: _infoPill('Payback $eta')),
+            ],
+          ),
+          if (!recommendation.affordable) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Need ${formatCoins(shortfall)} more coins',
+              style: const TextStyle(
+                color: Color(0xFFFCA5A5),
+                fontWeight: FontWeight.w700,
+                fontSize: 11,
+              ),
+            ),
+          ],
+          const SizedBox(height: 10),
+          PurchaseButton(
+            label: 'Buy ${formatCoins(recommendation.cost)}',
+            enabled: recommendation.affordable,
+            backgroundColor: recommendation.color,
+            onPressed: recommendation.affordable ? recommendation.onBuy : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoPill(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(999),
+        color: Colors.white.withValues(alpha: 0.08),
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          color: Color(0xFFBFDBFE),
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
+        ),
+      ),
+    );
+  }
+
+  String _formatEta(double seconds) {
+    if (seconds.isInfinite || seconds.isNaN || seconds <= 0) {
+      return 'N/A';
+    }
+    if (seconds < 60) {
+      return '${seconds.toStringAsFixed(0)}s';
+    }
+    if (seconds < 3600) {
+      return '${(seconds / 60).toStringAsFixed(1)}m';
+    }
+    return '${(seconds / 3600).toStringAsFixed(1)}h';
+  }
+}
+
+class _QuickActionsCard extends StatelessWidget {
+  const _QuickActionsCard({
+    required this.onAutoBuyProfit,
+    required this.onAutoBuyManagers,
+  });
+
+  final VoidCallback onAutoBuyProfit;
+  final VoidCallback onAutoBuyManagers;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Quick Actions',
+            style: TextStyle(
+              color: Color(0xFFF8FAFC),
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'One tap to apply all affordable upgrades in bulk.',
+            style: TextStyle(
+              color: Color(0xFFCBD5E1),
+              fontWeight: FontWeight.w600,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: PurchaseButton(
+                  label: 'Auto-Buy Profit x2',
+                  backgroundColor: const Color(0xFF7C3AED),
+                  onPressed: onAutoBuyProfit,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: PurchaseButton(
+                  label: 'Auto-Hire Managers',
+                  backgroundColor: const Color(0xFF16A34A),
+                  onPressed: onAutoBuyManagers,
+                ),
+              ),
+            ],
           ),
         ],
       ),

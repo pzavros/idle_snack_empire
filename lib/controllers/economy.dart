@@ -31,7 +31,7 @@ class Economy {
   }
 
   static double permanentMultiplier(GameState state) {
-    return 1 + (state.goldenChips * 0.05);
+    return 1 + (state.empireLevel * 0.5);
   }
 
   static bool isDoubleIncomeBoostActive(GameState state, int nowEpochMs) {

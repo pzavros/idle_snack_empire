@@ -17,7 +17,7 @@ class GameState {
     required this.highestCoins,
     required this.highestIncomePerSecond,
     required this.lastSavedEpochMs,
-    required this.goldenChips,
+    required this.empireLevel,
     required this.soundEnabled,
     required this.hapticsEnabled,
     required this.majorActionCount,
@@ -48,7 +48,7 @@ class GameState {
       highestCoins: 120,
       highestIncomePerSecond: 0,
       lastSavedEpochMs: now,
-      goldenChips: 0,
+      empireLevel: 0,
       soundEnabled: false,
       hapticsEnabled: true,
       majorActionCount: 0,
@@ -60,6 +60,7 @@ class GameState {
     final stationJson = (json['stations'] as List<dynamic>? ?? const [])
         .whereType<Map<String, dynamic>>()
         .toList();
+    final legacyGoldenChips = (json['goldenChips'] as num?)?.toInt() ?? 0;
 
     return GameState(
       coins: (json['coins'] as num?)?.toDouble() ?? 0,
@@ -87,7 +88,7 @@ class GameState {
       highestIncomePerSecond:
           (json['highestIncomePerSecond'] as num?)?.toDouble() ?? 0,
       lastSavedEpochMs: (json['lastSavedEpochMs'] as num?)?.toInt() ?? 0,
-      goldenChips: (json['goldenChips'] as num?)?.toInt() ?? 0,
+      empireLevel: (json['empireLevel'] as num?)?.toInt() ?? legacyGoldenChips,
       soundEnabled: json['soundEnabled'] as bool? ?? false,
       hapticsEnabled: json['hapticsEnabled'] as bool? ?? true,
       majorActionCount: (json['majorActionCount'] as num?)?.toInt() ?? 0,
@@ -109,7 +110,7 @@ class GameState {
   double highestCoins;
   double highestIncomePerSecond;
   int lastSavedEpochMs;
-  int goldenChips;
+  int empireLevel;
   bool soundEnabled;
   bool hapticsEnabled;
   int majorActionCount;
@@ -131,7 +132,8 @@ class GameState {
       'highestCoins': highestCoins,
       'highestIncomePerSecond': highestIncomePerSecond,
       'lastSavedEpochMs': lastSavedEpochMs,
-      'goldenChips': goldenChips,
+      'empireLevel': empireLevel,
+      'goldenChips': empireLevel,
       'soundEnabled': soundEnabled,
       'hapticsEnabled': hapticsEnabled,
       'majorActionCount': majorActionCount,
